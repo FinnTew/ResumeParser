@@ -1,4 +1,6 @@
 import json
+import time
+
 import jieba
 from httpx import Client
 from jsonrpcserver.response import ErrorResponse
@@ -219,8 +221,78 @@ class Grok:
         )
         return completion.choices[0].message.content
 
+class MultiGrokPolling:
+    def __init__(self, grok_instances, max_retries=5, retry_interval=2, health_check_interval=60):
+        self._grok_instances = grok_instances
+        self._max_retries = max_retries
+        self._retry_interval = retry_interval
+        self._health_check_interval = health_check_interval
+
+        self._last_health_check = 0
+        self._healthy_groks = grok_instances
+
+    @staticmethod
+    def health_check(grok):
+        try:
+            test_response = grok.comp("system", "health_check")
+            return test_response is not None
+        except Exception as e:
+            print(f"Health check failed for {grok}: {e}")
+            return False
+
+    def perform_health_check(self):
+        print("Performing health check...")
+        self._healthy_groks = [grok for grok in self._grok_instances if self.health_check(grok)]
+        if not self._healthy_groks:
+            print("No healthy Grok instances found!")
+        else:
+            print(f"Healthy Grok instances: {len(self._healthy_groks)}")
+
+    def comp(self, duty, prompt) -> str:
+        current_time = time.time()
+        if current_time - self._last_health_check > self._health_check_interval:
+            self.perform_health_check()
+            self._last_health_check = current_time
+
+        if not self._healthy_groks:
+            raise Exception("No healthy Grok instances available for polling.")
+
+        for grok in self._healthy_groks:
+            attempt = 0
+            while attempt < self._max_retries:
+                try:
+                    result = grok.comp(duty, prompt)
+                    if result:
+                        print(f"Grok {grok} returned a valid response.")
+                        return result
+                except Exception as e:
+                    print(f"Attempt {attempt + 1} for Grok {grok} failed: {e}")
+
+                attempt += 1
+                if attempt < self._max_retries:
+                    time.sleep(self._retry_interval)
+
+            print(f"Grok {grok} failed after {self._max_retries} attempts. Moving to the next instance.")
+
+        raise Exception(f"All healthy Grok instances failed to get a valid response after {self._max_retries} attempts each.")
+
+
 http_client = Client(proxy="http://127.0.0.1:12346")
-grok = Grok(base_url="https://api.x.ai/v1", api_key="xai-j2zmXPhm8WjAJ1duNse81HTp7Fp1BaN2sgY9z0JXpiZWgRiOMb31ljDpQxNRGvp0nek37fZEdqS2Tr5s", http_client=http_client)
+base_url="https://api.x.ai/v1"
+api_keys = [
+    "xai-bEhTj4YIiiuvqEQttqqyd4tm3CKbtuhnxBjC3S6aykKyY3AsA4PlLFCbbo4nErdOJy2dk09bZ2C9udFM"
+]
+
+def get_instance(key: str):
+    return Grok(base_url=base_url, api_key=key, http_client=http_client)
+
+grok = MultiGrokPolling(
+    grok_instances=[get_instance(key) for key in api_keys],
+    max_retries=3,
+    retry_interval=1,
+    health_check_interval=60
+)
+
 
 @method()
 def job_parse(job_content) -> Result:
@@ -320,7 +392,7 @@ def job_parse(job_content) -> Result:
 
     duty = "You are a professional resume and job description (JD) parsing assistant, specializing in converting complex job descriptions (JDs) into structured data formats."
 
-    json_content = grok.comp(duty, prompt).strip().replace("```json", "").replace("```", "")
+    json_content = grok.comp(duty, prompt).strip().split('```json')[1].split('```')[0]
     return Success(json_content)
 
 @method()
@@ -499,7 +571,7 @@ GitHub：https://github.com/zhangsan
 
     duty = "You are a professional resume parsing assistant, specializing in converting complex resume content into structured data formats."
 
-    json_content = grok.comp(duty, prompt).strip().replace("```json", "").replace("```", "")
+    json_content = grok.comp(duty, prompt).strip().split('```json')[1].split('```')[0]
 
     return Success(json_content)
 
