@@ -3,6 +3,12 @@
 ## 介绍
 C# 课程设计 - 智能简历解析系统，解析和人岗匹配部分。
 
+## 拉取 bert-base-chinese
+
+```bash
+git clone https://huggingface.co/google-bert/bert-base-chinese
+```
+
 ### 简历解析 & 岗位JD解析
 
 利用合适的 `prompt` 使用 `Grok-beta 大模型` 完成解析任务，得到 `json` 结构化数据。
