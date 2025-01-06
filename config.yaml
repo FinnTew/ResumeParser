@@ -1,0 +1,12 @@
+json_rpc:
+  port: 8899
+ai_model:
+  proxy: http://127.0.0.1:12346
+  models:
+    - model_name: grok-2-latest
+      base_url: https://api.x.ai/v1
+      api_key: xai-bEhTj4YIiiuvqEQttqqyd4tm3CKbtuhnxBjC3S6aykKyY3AsA4PlLFCbbo4nErdOJy2dk09bZ2C9udFM
+  polling:
+    max_retries: 3
+    retry_interval: 1 # 单位 秒
+    health_check_interval: 60 # 单位 秒
